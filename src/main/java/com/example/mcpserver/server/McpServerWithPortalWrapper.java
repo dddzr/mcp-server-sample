@@ -2,6 +2,7 @@ package com.example.mcpserver.server;
 
 import com.example.mcpserver.protocol.*;
 import com.example.mcpserver.portal.PortalRestClient;
+import com.example.mcpserver.util.LogUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Service;
@@ -43,7 +44,14 @@ public class McpServerWithPortalWrapper {
         this.apiMappings = new ConcurrentHashMap<>();
         
         // 포털 API를 MCP 도구로 매핑
-        initializePortalTools();
+        try {
+            LogUtil.infoPrintln("MCP 서버 초기화 시작...");
+            initializePortalTools();
+            LogUtil.infoPrintln("MCP 서버 초기화 완료. 등록된 도구 수: " + tools.size());
+        } catch (Exception e) {
+            LogUtil.errPrintln("MCP 서버 초기화 중 오류 발생: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 
     /**
@@ -98,20 +106,44 @@ public class McpServerWithPortalWrapper {
             HttpMethod.POST
         ));
         
-        // 예시 3: 공지사항 조회 도구
-        Map<String, Object> noticeSchema = new HashMap<>();
-        noticeSchema.put("type", "object");
-        noticeSchema.put("properties", new HashMap<>());
-        
-        Tool noticeTool = new Tool(
-            "get_notices",
-            "공지사항 목록을 조회합니다. 포털 REST API: GET /api/portal/notices",
-            noticeSchema
-        );
-        registerTool(noticeTool, new PortalApiMapping(
-            "/notices",
-            HttpMethod.GET
+        // 3. 포털 메뉴 정보 조회 도구
+        // POST https://localhost:8083/selectMenuInfo.json
+        Map<String, Object> menuInfoSchema = new HashMap<>();
+        menuInfoSchema.put("type", "object");
+        Map<String, Object> menuInfoProperties = new HashMap<>();
+
+        // input_data 객체 스키마
+        Map<String, Object> menuInputDataSchema = new HashMap<>();
+        menuInputDataSchema.put("type", "object");
+        Map<String, Object> menuInputDataProps = new HashMap<>();
+        menuInputDataProps.put("menu_name", Map.of(
+            "type", "string",
+            "description", "메뉴 이름 (예: \"공지사항\", \"메뉴 정보\" 등)"
         ));
+        menuInputDataSchema.put("properties", menuInputDataProps);
+        menuInputDataSchema.put("required", Arrays.asList("menu_name"));
+
+        // session_id 파라미터 추가 (선택적)
+        menuInfoProperties.put("session_id", Map.of(
+            "type", "string",
+            "description", "포털 세션 ID (JSESSIONID). 세션이 필요한 경우 필수입니다."
+        ));
+
+        // 최상위 menuInfo 도구 스키마 구성
+        menuInfoProperties.put("input_data", menuInputDataSchema);
+        menuInfoSchema.put("properties", menuInfoProperties);
+        menuInfoSchema.put("required", Arrays.asList("input_data"));
+
+        Tool menuInfoTool = new Tool(
+            "get_menu_info",
+            "메뉴 정보를 조회합니다. 포털 REST API: POST /selectMenuInfo.json",
+            menuInfoSchema
+        );
+        registerTool(menuInfoTool, new PortalApiMapping(
+            "/selectMenuInfo.json",
+            HttpMethod.POST
+        ));
+        
     }
 
     /**
@@ -146,7 +178,15 @@ public class McpServerWithPortalWrapper {
                 case "initialize":
                     return handleInitialize(id, request.getParams());
                     
+                case "notifications/initialized":
+                    // Notification은 응답이 필요 없음 (id가 null)
+                    return null;
+                    
                 default:
+                    // Notification인 경우 (id가 null) 응답을 반환하지 않음
+                    if (id == null) {
+                        return null;
+                    }
                     return new McpResponse(id, new McpError(
                         McpError.ErrorCode.METHOD_NOT_FOUND,
                         "Method not found: " + method
@@ -200,14 +240,55 @@ public class McpServerWithPortalWrapper {
                 ));
             }
             
+            // 세션 ID 추출
+            String sessionId = null;
+            if (arguments != null) {
+                // 최상위 레벨에서 먼저 확인
+                if (arguments.containsKey("session_id")) {
+                    sessionId = (String) arguments.get("session_id");
+                    LogUtil.debugPrintln("[DEBUG] 세션 ID 추출 성공: " + sessionId);
+                }
+
+                if (sessionId == null) {
+                    LogUtil.debugPrintln("[DEBUG] 세션 ID를 찾을 수 없습니다.");
+                }
+            } else {
+                LogUtil.debugPrintln("[DEBUG] arguments가 null입니다.");
+            }
+            
+            // POST 요청 본문 구성 (.json으로 끝나는 엔드포인트는 input_data 구조로 전송)
+            Object requestBody = null;
+            if (mapping.getMethod() == HttpMethod.POST || mapping.getMethod() == HttpMethod.PUT) {
+                if (arguments != null) {
+                    requestBody = new HashMap<>(arguments);
+                }
+            }
+            
             // 포털 REST API 호출
             String endpoint = buildEndpoint(mapping.getEndpoint(), arguments);
+
             Object apiResult = portalRestClient.callPortalApi(
                 endpoint,
                 mapping.getMethod(),
-                mapping.getMethod() == HttpMethod.POST || mapping.getMethod() == HttpMethod.PUT 
-                    ? arguments : null
+                requestBody,
+                sessionId
             );
+            
+            // 응답 원본 로그 출력 (디버깅 용)
+            // try {
+            //     if (apiResult instanceof String) {
+            //         LogUtil.debugPrintln("[DEBUG] API 응답 (String): " + apiResult);
+            //     } else if (apiResult instanceof Map) {
+            //         String responseJson = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(apiResult);
+            //         LogUtil.debugPrintln("[DEBUG] API 응답 (Map):\n" + responseJson);
+            //     } else {
+            //         LogUtil.debugPrintln("[DEBUG] API 응답 (기타 타입): " + apiResult);
+            //     }
+            // } catch (Exception e) {
+            //     LogUtil.debugPrintln("[DEBUG] API 응답 로그 출력 실패: " + e.getMessage());
+            // }
+            
+            // TODO: 오류 응답 처리
             
             // 결과를 MCP 형식으로 변환
             Map<String, Object> responseResult = new HashMap<>();
@@ -217,9 +298,14 @@ public class McpServerWithPortalWrapper {
             return new McpResponse(id, responseResult);
             
         } catch (Exception e) {
+            // 에러 상세 정보 포함
+            String errorMessage = "Error calling portal API: " + e.getMessage();
+            if (e.getCause() != null) {
+                errorMessage += " (원인: " + e.getCause().getMessage() + ")";
+            }
             return new McpResponse(id, new McpError(
                 McpError.ErrorCode.INTERNAL_ERROR,
-                "Error calling portal API: " + e.getMessage()
+                errorMessage
             ));
         }
     }
@@ -251,6 +337,7 @@ public class McpServerWithPortalWrapper {
         ));
         return new McpResponse(id, result);
     }
+    
 
     /**
      * 포털 REST API 매핑 정보

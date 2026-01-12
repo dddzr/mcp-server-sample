@@ -2,13 +2,33 @@ package com.example.mcpserver.server;
 
 import com.example.mcpserver.protocol.*;
 import com.example.mcpserver.portal.PortalRestClient;
+import com.example.mcpserver.util.LogUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
+import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.http.converter.StringHttpMessageConverter;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
+import org.apache.hc.client5.http.impl.classic.HttpClients;
+import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuilder;
+import org.apache.hc.client5.http.ssl.SSLConnectionSocketFactory;
+import org.apache.hc.client5.http.ssl.NoopHostnameVerifier;
+import org.apache.hc.core5.ssl.SSLContextBuilder;
+import javax.net.ssl.X509TrustManager;
+import javax.net.ssl.TrustManager;
+import java.security.cert.X509Certificate;
 
+import javax.net.ssl.SSLContext;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
+import java.security.KeyManagementException;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
+import java.util.Arrays;
 
 /**
  * 표준 MCP 서버 (stdio 기반)
@@ -41,8 +61,10 @@ public class McpStdioServer {
     public McpStdioServer() {
         this.objectMapper = new ObjectMapper();
         this.mcpServer = createMcpServer();
-        this.reader = new BufferedReader(new InputStreamReader(System.in));
-        this.writer = new PrintWriter(System.out, true);
+        // UTF-8 인코딩으로 stdin 읽기
+        this.reader = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
+        // UTF-8 인코딩으로 stdout 쓰기
+        this.writer = new PrintWriter(new OutputStreamWriter(System.out, StandardCharsets.UTF_8), true);
     }
     
     /**
@@ -51,9 +73,76 @@ public class McpStdioServer {
      */
     private McpServerWithPortalWrapper createMcpServer() {
         ObjectMapper mapper = new ObjectMapper();
-        RestTemplate restTemplate = new RestTemplate();
+        RestTemplate restTemplate = createRestTemplateWithSslBypass();
         PortalRestClient portalClient = new PortalRestClient(restTemplate);
         return new McpServerWithPortalWrapper(mapper, portalClient);
+    }
+    
+    /**
+     * SSL 인증서 검증을 우회하는 RestTemplate을 생성합니다.
+     * localhost의 자체 서명 인증서를 허용하기 위해 사용합니다.
+     */
+    private RestTemplate createRestTemplateWithSslBypass() {
+        try {
+            // 모든 인증서를 신뢰하는 TrustManager 생성
+            TrustManager[] trustAllCerts = new TrustManager[] {
+                new X509TrustManager() {
+                    public X509Certificate[] getAcceptedIssuers() {
+                        return null;
+                    }
+                    public void checkClientTrusted(X509Certificate[] certs, String authType) {
+                    }
+                    public void checkServerTrusted(X509Certificate[] certs, String authType) {
+                    }
+                }
+            };
+            
+            SSLContext sslContext = SSLContextBuilder.create()
+                .loadTrustMaterial(null, (chain, authType) -> true) // 모든 인증서 신뢰
+                .build();
+            
+            // TrustManager 설정
+            sslContext.init(null, trustAllCerts, new java.security.SecureRandom());
+            
+            SSLConnectionSocketFactory sslSocketFactory = new SSLConnectionSocketFactory(
+                sslContext,
+                NoopHostnameVerifier.INSTANCE // 모든 호스트명 허용
+            );
+            
+            CloseableHttpClient httpClient = HttpClients.custom()
+                .setConnectionManager(
+                    PoolingHttpClientConnectionManagerBuilder.create()
+                        .setSSLSocketFactory(sslSocketFactory)
+                        .build()
+                )
+                .evictExpiredConnections()
+                .build();
+            
+                   HttpComponentsClientHttpRequestFactory factory = new HttpComponentsClientHttpRequestFactory(httpClient);
+                   RestTemplate restTemplate = new RestTemplate(factory);
+                   
+                   // UTF-8 인코딩을 보장하기 위한 MessageConverter 설정
+                   ObjectMapper mapper = new ObjectMapper();
+                   mapper.configure(com.fasterxml.jackson.core.JsonGenerator.Feature.ESCAPE_NON_ASCII, false);
+                   
+                   MappingJackson2HttpMessageConverter jsonConverter = new MappingJackson2HttpMessageConverter(mapper);
+                   jsonConverter.setDefaultCharset(StandardCharsets.UTF_8);
+                   
+                   StringHttpMessageConverter stringConverter = new StringHttpMessageConverter(StandardCharsets.UTF_8);
+                   
+                   restTemplate.setMessageConverters(Arrays.asList(
+                        stringConverter,
+                        jsonConverter
+                    ));
+                
+                   
+                   return restTemplate;
+        } catch (NoSuchAlgorithmException | KeyManagementException | KeyStoreException e) {
+            // SSL 설정 실패 시 기본 RestTemplate 반환
+            LogUtil.errPrintln("SSL 설정 실패, 기본 RestTemplate 사용: " + e.getMessage());
+            e.printStackTrace();
+            return new RestTemplate();
+        }
     }
     
     /**
@@ -61,7 +150,7 @@ public class McpStdioServer {
      * 표준 입력에서 메시지를 읽고 처리합니다.
      */
     public void start() {
-        System.err.println("MCP 서버 시작 (stdio 모드)");
+        LogUtil.infoPrintln("MCP 서버 시작 (stdio 모드)");
         
         try {
             String line;
@@ -83,14 +172,17 @@ public class McpStdioServer {
                     // 요청 처리
                     McpResponse response = mcpServer.handleRequest(request);
                     
-                    // 응답 전송 (표준 출력)
-                    String responseJson = objectMapper.writeValueAsString(response);
-                    writer.println(responseJson);
-                    writer.flush();
+                    // Notification(id가 null)인 경우 응답을 보내지 않음
+                    if (response != null && request.getId() != null) {
+                        // 응답 전송 (표준 출력)
+                        String responseJson = objectMapper.writeValueAsString(response);
+                        writer.println(responseJson);
+                        writer.flush();
+                    }
                     
                 } catch (Exception e) {
                     // 오류 발생 시 오류 응답 전송
-                    System.err.println("오류 발생: " + e.getMessage());
+                    LogUtil.errPrintln("오류 발생: " + e.getMessage());
                     e.printStackTrace();
                     
                     McpResponse errorResponse = new McpResponse(
@@ -107,7 +199,7 @@ public class McpStdioServer {
                 }
             }
         } catch (Exception e) {
-            System.err.println("서버 종료: " + e.getMessage());
+            LogUtil.errPrintln("서버 종료: " + e.getMessage());
             e.printStackTrace();
         }
     }

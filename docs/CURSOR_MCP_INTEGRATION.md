@@ -105,8 +105,10 @@ public class McpStdioServer {
 }
 ```
 
-### 2. Cursor에 추가
+### 2. 빌드 (jar파일 생성)
+  - `mvn clean package`
 
+### 3. Cursor에 추가
 ```json
 {
   "mcpServers": {
@@ -116,11 +118,17 @@ public class McpStdioServer {
         "-jar",
         "{프로젝트 위치}/mcp-server-sample/target/mcp-server-sample-0.0.1-SNAPSHOT.jar",
         "--mcp-stdio"
-      ]
+      ],
+      "env": {
+        "PORTAL_API_BASE_URL": "https://localhost:8083"
+      }
     }
   }
 }
 ```
+### 4. Cursor에 추가
+  - Cursor Settings > Tools & MCP > Installed MCP Servers 에서 on/off 가능
+  - 서버 코드 수정 시 off 하고 다시 빌드하면 된다.
 
 ---
 
