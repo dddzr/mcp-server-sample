@@ -41,13 +41,6 @@ portal-api/ (별도 프로젝트)
 
 ### 1. 포털 REST API 서버 실행 (별도 프로젝트)
 
-```bash
-cd ../portal-api
-mvn spring-boot:run
-```
-
-포트: `http://localhost:8081`
-
 ### 2. MCP Server 빌드
 
 ```bash

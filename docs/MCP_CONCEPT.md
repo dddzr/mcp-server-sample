@@ -19,13 +19,13 @@
 
 ### 핵심 개념
 1. **MCP Host**
-  - Client들을 보유/관리
+  - Client들을 보유/관리 (프로그램/시스템 1개)
   - Client ↔ Server 연결 세션 유지
   - 입출력 라우팅
   - *실제 제품에서 [MCP Client + LLM] 통합 → MCP Host란 이름으로 동작
 
 2. **클라이언트 (Client)**
-   - **MCP Server에 JSON-RPC 요청 보내는 엔진**
+   - **MCP Server에 JSON-RPC 요청 보내는 엔진** (클래스/객체)
    - 자연어 요청을 분석하여 서버 도구 호출
    - 응답 결과를 자연어로 변환하여 제공
    - AI 모델(LLM 에이전트)실제 실행 or 규칙 기반 에이전트도 가능
@@ -139,6 +139,7 @@
 ```
 
 ## 🛠️ 구현 기술
+
 ### 도구 선택 방법
 **도구 선택 기준:**
 - ✅ **Tool.description**: LLM이 이 설명을 보고 도구 선택
@@ -164,6 +165,33 @@ Tool tool = new Tool(
   ]
 }
 ```
+
+### stdio 모드
+**stdio**는 **Standard Input/Output**(표준 입출력)의 약자로, MCP 서버와 클라이언트 간의 통신 방식 중 하나입니다.
+
+**특징:**
+- ✅ **프로세스 간 통신**: Cursor가 MCP 서버 프로세스를 실행하고, 표준 입출력(stdin/stdout)으로 통신합니다.
+- ✅ **JSON-RPC 2.0**: 한 줄씩 JSON 메시지를 주고받습니다.
+- ✅ **네트워크 불필요**: HTTP/WebSocket 없이 프로세스의 입출력만 사용합니다.
+- ✅ **간단한 설정**: 별도 포트나 URL 설정이 필요 없습니다.
+- ✅ **가벼운 실행**: Spring Boot 컨텍스트 없이도 순수 Java로 구현 가능합니다. (Spring Boot는 기본적으로 웹 서버(톰캣 등)를 시작하는데, stdio 모드에서는 불필요)
+
+**통신 흐름:**
+```
+[Cursor (MCP 클라이언트)]
+    ↓ stdin (표준 입력) - JSON-RPC 요청 전송
+[MCP 서버 프로세스]
+    ↓ stdout (표준 출력) - JSON-RPC 응답 전송
+[Cursor (MCP 클라이언트)]
+```
+
+**stdio vs 다른 통신 방식:**
+
+| 방식 | 통신 방법 | 설정 |
+|------|----------|------|
+| **stdio** | 표준 입출력 (stdin/stdout) | `command`, `args`만 필요 |
+| **HTTP** | HTTP 요청/응답 | `url` 필요 |
+| **WebSocket** | WebSocket 연결 | `url` (ws://) 필요 |
 
 ### Spring AI
 **Spring AI**

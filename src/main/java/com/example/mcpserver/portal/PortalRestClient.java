@@ -38,7 +38,7 @@ public class PortalRestClient {
         this.objectMapper = new ObjectMapper();
         // UTF-8 인코딩 보장을 위한 설정
         this.objectMapper.configure(com.fasterxml.jackson.core.JsonGenerator.Feature.ESCAPE_NON_ASCII, false);
-        // 포털 API URL (환경 변수 우선, 없으면 기본값)
+        // 포털 API URL (환경 변수 우선, 없으면 기본값 - McpStdioServer는 Spring Boot 컨텍스트를 시작하지 않고 직접 main 메서드로 실행)
         String envUrl = System.getenv("PORTAL_API_BASE_URL");
         this.portalBaseUrl = envUrl != null ? envUrl : "https://localhost:8083";
     }
