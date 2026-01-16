@@ -223,8 +223,13 @@ fetch('http://localhost:8080/mcp/request?clientId=my-client', {
     body: JSON.stringify({
         jsonrpc: '2.0',
         id: '1',
-        method: 'tools/list',
-        params: {}
+        method: 'tools/call',
+        params: {
+          "tool": "도구_이름",
+          "arguments": {
+              "boardId": 1
+          }
+        }
     })
 });
 ```
