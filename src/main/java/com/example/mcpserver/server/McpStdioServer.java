@@ -5,30 +5,13 @@ import com.example.mcpserver.portal.PortalRestClient;
 import com.example.mcpserver.util.LogUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
-import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.web.client.RestTemplate;
-import org.springframework.http.converter.StringHttpMessageConverter;
-import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
-import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
-import org.apache.hc.client5.http.impl.classic.HttpClients;
-import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuilder;
-import org.apache.hc.client5.http.ssl.SSLConnectionSocketFactory;
-import org.apache.hc.client5.http.ssl.NoopHostnameVerifier;
-import org.apache.hc.core5.ssl.SSLContextBuilder;
-import javax.net.ssl.X509TrustManager;
-import javax.net.ssl.TrustManager;
-import java.security.cert.X509Certificate;
 
-import javax.net.ssl.SSLContext;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
-import java.security.KeyManagementException;
-import java.security.KeyStoreException;
-import java.security.NoSuchAlgorithmException;
-import java.util.Arrays;
 
 /**
  * 표준 MCP 서버 (stdio 기반)
@@ -73,76 +56,10 @@ public class McpStdioServer {
      */
     private McpServerWithPortalWrapper createMcpServer() {
         ObjectMapper mapper = new ObjectMapper();
-        RestTemplate restTemplate = createRestTemplateWithSslBypass();
+        mapper.configure(com.fasterxml.jackson.core.JsonGenerator.Feature.ESCAPE_NON_ASCII, false);
+        RestTemplate restTemplate = com.example.mcpserver.util.SslByPassUtil.createRestTemplateWithSslBypass(mapper);
         PortalRestClient portalClient = new PortalRestClient(restTemplate);
         return new McpServerWithPortalWrapper(mapper, portalClient);
-    }
-    
-    /**
-     * SSL 인증서 검증을 우회하는 RestTemplate을 생성합니다.
-     * localhost의 자체 서명 인증서를 허용하기 위해 사용합니다.
-     */
-    private RestTemplate createRestTemplateWithSslBypass() {
-        try {
-            // 모든 인증서를 신뢰하는 TrustManager 생성
-            TrustManager[] trustAllCerts = new TrustManager[] {
-                new X509TrustManager() {
-                    public X509Certificate[] getAcceptedIssuers() {
-                        return null;
-                    }
-                    public void checkClientTrusted(X509Certificate[] certs, String authType) {
-                    }
-                    public void checkServerTrusted(X509Certificate[] certs, String authType) {
-                    }
-                }
-            };
-            
-            SSLContext sslContext = SSLContextBuilder.create()
-                .loadTrustMaterial(null, (chain, authType) -> true) // 모든 인증서 신뢰
-                .build();
-            
-            // TrustManager 설정
-            sslContext.init(null, trustAllCerts, new java.security.SecureRandom());
-            
-            SSLConnectionSocketFactory sslSocketFactory = new SSLConnectionSocketFactory(
-                sslContext,
-                NoopHostnameVerifier.INSTANCE // 모든 호스트명 허용
-            );
-            
-            CloseableHttpClient httpClient = HttpClients.custom()
-                .setConnectionManager(
-                    PoolingHttpClientConnectionManagerBuilder.create()
-                        .setSSLSocketFactory(sslSocketFactory)
-                        .build()
-                )
-                .evictExpiredConnections()
-                .build();
-            
-                   HttpComponentsClientHttpRequestFactory factory = new HttpComponentsClientHttpRequestFactory(httpClient);
-                   RestTemplate restTemplate = new RestTemplate(factory);
-                   
-                   // UTF-8 인코딩을 보장하기 위한 MessageConverter 설정
-                   ObjectMapper mapper = new ObjectMapper();
-                   mapper.configure(com.fasterxml.jackson.core.JsonGenerator.Feature.ESCAPE_NON_ASCII, false);
-                   
-                   MappingJackson2HttpMessageConverter jsonConverter = new MappingJackson2HttpMessageConverter(mapper);
-                   jsonConverter.setDefaultCharset(StandardCharsets.UTF_8);
-                   
-                   StringHttpMessageConverter stringConverter = new StringHttpMessageConverter(StandardCharsets.UTF_8);
-                   
-                   restTemplate.setMessageConverters(Arrays.asList(
-                        stringConverter,
-                        jsonConverter
-                    ));
-                
-                   
-                   return restTemplate;
-        } catch (NoSuchAlgorithmException | KeyManagementException | KeyStoreException e) {
-            // SSL 설정 실패 시 기본 RestTemplate 반환
-            LogUtil.errPrintln("SSL 설정 실패, 기본 RestTemplate 사용: " + e.getMessage());
-            e.printStackTrace();
-            return new RestTemplate();
-        }
     }
     
     /**

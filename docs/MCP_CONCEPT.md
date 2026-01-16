@@ -1,6 +1,6 @@
 # MCP (Model Context Protocol) 챗봇 데모
 
-이 프로젝트는 MCP(Model Context Protocol)를 사용한 챗봇 시스템의 데모입니다. 
+이 프로젝트는 MCP(Model Context Protocol)를 사용한 챗봇 시스템의  MCP Server 데모입니다. 
 사내 포털 등에 챗봇을 적용하기 위한 기반 구조를 제공합니다.
 
 ## 📚 MCP란?

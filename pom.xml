@@ -67,7 +67,8 @@
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
 				<configuration>
-					<mainClass>com.example.mcpserver.server.McpStdioServer</mainClass>
+					<!-- stdio 모드와 HTTP/SSE 모드를 모두 지원 -->
+					<mainClass>com.example.mcpserver.McpServerApplication</mainClass>
 				</configuration>
 			</plugin>
 		</plugins>

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- stdio 모드: System.err로 출력하여 JSON 응답(System.out)과 분리 -->
+    <appender name="STDERR" class="ch.qos.logback.core.ConsoleAppender">
+        <target>System.err</target>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+    
+    <!-- 루트 로거: 모든 로그를 STDERR로 출력 -->
+    <root level="DEBUG">
+        <appender-ref ref="STDERR" />
+    </root>
+    
+    <!-- 패키지별 로그 레벨 설정 (선택적) -->
+    <logger name="com.example.mcpserver" level="DEBUG" />
+</configuration>
