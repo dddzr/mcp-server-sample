@@ -56,16 +56,16 @@ public class PortalRestClient {
     }
     
     /**
-     * 포털 REST API를 호출합니다. (세션 ID 포함)
+     * 포털 REST API를 호출합니다. (access_token 포함)
      * 
      * @param endpoint API 엔드포인트 (예: "/employees/123")
      * @param method HTTP 메서드 (GET, POST, PUT, DELETE)
      * @param requestBody 요청 본문 (POST/PUT 시 사용)
-     * @param sessionId 세션 ID (JSESSIONID 등, 선택적)
+     * @param access_token 접근 토큰(Bearer), 선택적
      * @return API 응답
      */
-    public Object callPortalApi(String endpoint, HttpMethod method, Object requestBody, String sessionId) {
-        String url = portalBaseUrl + endpoint;
+    public Object callPortalApi(String endpoint, HttpMethod method, Object requestBody, String access_token) {
+        String url = portalBaseUrl + "/mcp" + endpoint;
         
         HttpHeaders headers = new HttpHeaders();
         
@@ -80,31 +80,42 @@ public class PortalRestClient {
             headers.set("Accept", "application/json;charset=UTF-8");
         }
         
-        // 세션 ID가 있으면 Cookie 헤더에 추가
-        LogUtil.debugPrintln("[DEBUG] 전달받은 sessionId: " + sessionId);
-        if (sessionId != null && !sessionId.trim().isEmpty()) {
-            // Cookie 헤더 설정 (여러 쿠키를 지원하도록 add 사용)
-            headers.add("Cookie", "JSESSIONID=" + sessionId);
-            LogUtil.debugPrintln("[DEBUG] Cookie 헤더 값 설정: " + headers.get("Cookie"));
+        // access_token이 있으면 Authorization 헤더에 추가
+        LogUtil.debugPrintln("[DEBUG] 전달받은 access_token: " + access_token);
+        if (access_token != null && !access_token.trim().isEmpty()) {
+            headers.setBearerAuth(access_token);
+            LogUtil.debugPrintln("[DEBUG] Authorization 헤더 값 설정(Bearer)");
         } else {
-            LogUtil.debugPrintln("[DEBUG] 세션 ID가 없습니다. 쿠키 헤더를 설정하지 않습니다.");
-            LogUtil.debugPrintln("[DEBUG] sessionId가 null이거나 빈 문자열입니다.");
+            LogUtil.debugPrintln("[DEBUG] access_token이 없습니다.");
         }
         
         // 모든 헤더 로그 출력
         LogUtil.debugPrintln("[DEBUG] 요청 URL: " + url);
         LogUtil.debugPrintln("[DEBUG] 요청 메서드: " + method);
         LogUtil.debugPrintln("[DEBUG] 요청 헤더: " + headers);
-        LogUtil.debugPrintln("[DEBUG] Cookie 헤더 값 (최종): " + headers.get("Cookie"));
         
-        // 요청 본문 설정
+        // 요청 본문 설정 및 로그 출력
         HttpEntity<?> entity;
         if (requestBody != null && (method == HttpMethod.POST || method == HttpMethod.PUT)) {
             // Content-Type을 MediaType으로 명시적으로 설정 (UTF-8 charset 포함)
             headers.setContentType(new MediaType("application", "json", StandardCharsets.UTF_8));
             entity = new HttpEntity<>(requestBody, headers);
+            
+            // 요청 본문 로그 출력
+            try {
+                String requestBodyJson = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(requestBody);
+                LogUtil.debugPrintln("[DEBUG] 요청 본문:\n" + requestBodyJson);
+            } catch (Exception e) {
+                LogUtil.debugPrintln("[DEBUG] 요청 본문 로그 출력 실패: " + e.getMessage());
+                LogUtil.debugPrintln("[DEBUG] 요청 본문 (toString): " + requestBody);
+            }
         } else {
             entity = new HttpEntity<>(requestBody, headers);
+            if (requestBody != null) {
+                LogUtil.debugPrintln("[DEBUG] 요청 본문: " + requestBody);
+            } else {
+                LogUtil.debugPrintln("[DEBUG] 요청 본문: 없음");
+            }
         }
         
         try {

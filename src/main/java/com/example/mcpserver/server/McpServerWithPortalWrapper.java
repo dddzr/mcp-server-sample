@@ -118,15 +118,15 @@ public class McpServerWithPortalWrapper {
         Map<String, Object> menuInputDataProps = new HashMap<>();
         menuInputDataProps.put("menu_name", Map.of(
             "type", "string",
-            "description", "메뉴 이름 (예: \"공지사항\", \"메뉴 정보\" 등)"
+            "description", "조회할 메뉴의 이름입니다. 사용자 요청에서 메뉴 이름을 추출하여 전달합니다. 예: 사용자가 '공지사항 메뉴 정보 줘'라고 요청하면 '공지사항'을 전달합니다."
         ));
         menuInputDataSchema.put("properties", menuInputDataProps);
         menuInputDataSchema.put("required", Arrays.asList("menu_name"));
 
-        // session_id 파라미터 추가 (선택적)
-        menuInfoProperties.put("session_id", Map.of(
+        // access_token 파라미터 추가 (선택적)
+        menuInfoProperties.put("access_token", Map.of(
             "type", "string",
-            "description", "포털 세션 ID (JSESSIONID). 세션이 필요한 경우 필수입니다."
+            "description", "포털 접근 토큰(Bearer). 필요 시 전달합니다."
         ));
 
         // 최상위 menuInfo 도구 스키마 구성
@@ -144,7 +144,7 @@ public class McpServerWithPortalWrapper {
             HttpMethod.POST
         ));
         
-    }
+            }
 
     /**
      * 도구를 등록합니다.
@@ -240,27 +240,30 @@ public class McpServerWithPortalWrapper {
                 ));
             }
             
-            // 세션 ID 추출
-            String sessionId = null;
+            // 액세스 토큰 추출
+            String access_token = null;
             if (arguments != null) {
-                // 최상위 레벨에서 먼저 확인
-                if (arguments.containsKey("session_id")) {
-                    sessionId = (String) arguments.get("session_id");
-                    LogUtil.debugPrintln("[DEBUG] 세션 ID 추출 성공: " + sessionId);
+                if (arguments.containsKey("access_token")) {
+                    access_token = (String) arguments.get("access_token");
+                    LogUtil.debugPrintln("[DEBUG] 액세스 토큰 추출 성공 (access_token): " + access_token);
                 }
-
-                if (sessionId == null) {
-                    LogUtil.debugPrintln("[DEBUG] 세션 ID를 찾을 수 없습니다.");
+                
+                if (access_token == null) {
+                    LogUtil.debugPrintln("[DEBUG] 액세스 토큰을 찾을 수 없습니다.");
                 }
             } else {
                 LogUtil.debugPrintln("[DEBUG] arguments가 null입니다.");
             }
             
+            // 액세스 토큰 전달 여부 저장 (응답 처리 시 사용)
+            final boolean hasAccessToken = access_token != null && !access_token.trim().isEmpty();
+            
             // POST 요청 본문 구성 (.json으로 끝나는 엔드포인트는 input_data 구조로 전송)
             Object requestBody = null;
             if (mapping.getMethod() == HttpMethod.POST || mapping.getMethod() == HttpMethod.PUT) {
-                if (arguments != null) {
-                    requestBody = new HashMap<>(arguments);
+                    if (arguments != null) {
+                        requestBody = new HashMap<>(arguments);
+                    }
                 }
             }
             
@@ -271,7 +274,7 @@ public class McpServerWithPortalWrapper {
                 endpoint,
                 mapping.getMethod(),
                 requestBody,
-                sessionId
+                access_token
             );
             
             // 응답 원본 로그 출력 (디버깅 용)
