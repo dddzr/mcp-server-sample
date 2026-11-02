@@ -6,6 +6,38 @@
 
 ## TODO
 Spring Ai 사용하여 tool 관리 가독성 좋고 편리하게 (예: @Tool 어노테이션 사용)
+## TODO: 구조 개선 (portal_mcp 이전 경험 반영)
+
+### 1. MCP 프로토콜 처리를 공식 SDK로 교체
+- [ ] `protocol/`(McpRequest·McpResponse·McpError·Tool·ToolCallRequest) → SDK `McpSchema` 객체로 교체 후 삭제
+- [ ] `McpSseController`(HTTP+SSE, MCP 사양에서 deprecated) → SDK Streamable HTTP 전송으로 교체
+      - 세션 불필요하면 `HttpServletStatelessServerTransport`를 `ServletRegistrationBean`으로 `/mcp`에 등록
+- [ ] `McpStdioServer` → SDK `StdioServerTransportProvider`로 교체 (stdio 지원은 유지)
+
+### 2. Tool 분리
+- [ ] `McpServerWithPortalWrapper`의 Tool들을 1 Tool = 1 클래스로 분리 (확인 필요: 현재 Tool 수·구성)
+  - 공통 인터페이스 `PortalTool { name, description, inputSchema, execute(context, args) }`
+  - 구현체를 `@Component`로 등록 → `List<PortalTool>` 주입받아 SDK `SyncToolSpecification`으로 일괄 등록
+  - 인자 꺼내기·결과 컬럼 고르기 등 공통 처리는 `ToolSupport`로
+- [ ] Tool 실행 정보를 `ToolContext`(토큰이 묶인 API 클라이언트, 요청 `_meta` 값)로 묶어 넘김
+
+### 3. 포탈 API 연동
+- [ ] `PortalRestClient` → 인터페이스(`PortalApi`) + 구현 분리. 테스트에서 가짜 구현으로 Tool 단위 테스트
+- [ ] 사용자 인증: 요청 `Authorization` 헤더를 transport `contextExtractor`로 읽어 Tool 실행까지 전달
+- [ ] 아래 「4. 토큰 처리」 결정에 맞춰 포탈 API 호출 시 인증 방식 정리
+
+### 4. 권한·토큰 처리
+- [ ] `tools/list`를 사용자 권한으로 필터 (`addToolFilter`). 권한 없어 빠진 Tool은 안내용 resource로 제공 (선택)
+- [ ] `tools/call` 실행 직전 권한 재확인 (목록 필터 결과에 기대지 않음)
+- [ ] 토큰 처리 방식 결정 — 클라이언트 토큰을 포탈 API에 그대로 전달(passthrough)하는 것은 MCP 보안 권고상 비권장
+  - 권장: MCP Server가 토큰 `aud`(=이 서버) 검증 → 포탈 API용 토큰은 별도 발급(token exchange) 또는 서버 자격증명 + 사용자 ID 전달
+  - 데모 단순화로 passthrough 유지 시 README에 한계로 명시
+
+### 5. 기타
+- [ ] `RestTemplateConfig` → 필요 없으면 제거 (JDK `HttpClient` 또는 `RestClient`)
+- [ ] `util/LogUtil` → SLF4J 직접 사용, 토큰 원문 로그 금지, 요청 ID로 클라이언트·서버·포탈 로그 연결
+- [ ] 결과 건수 제한 (LLM에 너무 많은 행을 넘기지 않게, 예: 50건 + `truncated`)
+
 
 ## 📚 아키텍처
 
